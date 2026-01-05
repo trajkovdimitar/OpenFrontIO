@@ -1,4 +1,5 @@
 import { execSync } from "child_process";
+import { resolve } from "path";
 import path from "path";
 import { fileURLToPath } from "url";
 import { defineConfig, loadEnv } from "vite";
@@ -51,13 +52,26 @@ export default defineConfig(({ mode }) => {
       tsconfigPaths(),
       createHtmlPlugin({
         minify: isProduction,
-        entry: "/src/client/Main.ts",
-        template: "index.html",
-        inject: {
-          data: {
-            // In case we need to inject variables into HTML
+        pages: [
+          {
+            entry: "/src/client/Main.ts",
+            filename: "index.html",
+            template: "index.html",
+            injectOptions: {
+              data: {
+                // In case we need to inject variables into HTML
+              },
+            },
           },
-        },
+          {
+            entry: "/src/client/Demo3D.ts",
+            filename: "demo-3d.html",
+            template: "demo-3d.html",
+            injectOptions: {
+              data: {},
+            },
+          },
+        ],
       }),
       viteStaticCopy({
         targets: [
@@ -87,9 +101,19 @@ export default defineConfig(({ mode }) => {
       emptyOutDir: true,
       assetsDir: "assets", // Sub-directory for assets
       rollupOptions: {
+        input: {
+          main: resolve(__dirname, "index.html"),
+          "demo-3d": resolve(__dirname, "demo-3d.html"),
+        },
         output: {
-          manualChunks: {
-            vendor: ["pixi.js", "howler", "zod", "protobufjs"],
+          manualChunks(id) {
+            // Vendor chunks for main app
+            if (id.includes("node_modules/pixi.js")) return "vendor";
+            if (id.includes("node_modules/howler")) return "vendor";
+            if (id.includes("node_modules/zod")) return "vendor";
+            if (id.includes("node_modules/protobufjs")) return "vendor";
+            // Three.js chunk for 3D demo
+            if (id.includes("node_modules/three")) return "three";
           },
         },
       },

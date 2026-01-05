@@ -50,6 +50,32 @@ import { createCanvas } from "./Utils";
 import { createRenderer, GameRenderer } from "./graphics/GameRenderer";
 import { GoToPlayerEvent } from "./graphics/layers/Leaderboard";
 import SoundManager from "./sound/SoundManager";
+import { create3DRenderer } from "./graphics3d/create3DRenderer";
+import { Game3DRenderer } from "./graphics3d/Game3DRenderer";
+import { InputHandler3D } from "./graphics3d/InputHandler3D";
+
+// 3D mode is now the default for all games
+function is3DMode(): boolean {
+  const params = new URLSearchParams(window.location.search);
+  // Use 2D only if explicitly requested with ?2d=true
+  if (params.get("2d") === "true" || params.get("2d") === "1") {
+    return false;
+  }
+  return true; // 3D is now the default
+}
+
+// Renderer interface that both 2D and 3D renderers implement
+interface GameRendererInterface {
+  transformHandler: { screenToWorldCoordinates(x: number, y: number): { x: number; y: number } };
+  uiState: { attackRatio: number; ghostStructure: unknown | null };
+  initialize(): void;
+  tick(): void;
+}
+
+// Input handler interface that both 2D and 3D input handlers implement
+interface InputHandlerInterface {
+  initialize(): void;
+}
 
 export interface LobbyConfig {
   serverConfig: ServerConfig;
@@ -194,12 +220,34 @@ async function createClientGame(
   );
 
   const canvas = createCanvas();
-  const gameRenderer = createRenderer(canvas, gameView, eventBus);
 
   console.log(
     `creating private game got difficulty: ${lobbyConfig.gameStartInfo.config.difficulty}`,
   );
 
+  // Check if 3D mode is enabled
+  if (is3DMode()) {
+    try {
+      console.log("Starting game in 3D mode");
+      const { renderer, inputHandler } = create3DRenderer(canvas, gameView, eventBus);
+      console.log("3D renderer created successfully");
+      return new ClientGameRunner(
+        lobbyConfig,
+        eventBus,
+        renderer as GameRendererInterface,
+        inputHandler as InputHandlerInterface,
+        transport,
+        worker,
+        gameView,
+      );
+    } catch (error) {
+      console.error("Failed to create 3D renderer, falling back to 2D:", error);
+      // Fall through to 2D mode
+    }
+  }
+
+  // Default 2D mode
+  const gameRenderer = createRenderer(canvas, gameView, eventBus);
   return new ClientGameRunner(
     lobbyConfig,
     eventBus,
@@ -228,8 +276,8 @@ export class ClientGameRunner {
   constructor(
     private lobby: LobbyConfig,
     private eventBus: EventBus,
-    private renderer: GameRenderer,
-    private input: InputHandler,
+    private renderer: GameRendererInterface,
+    private input: InputHandlerInterface,
     private transport: Transport,
     private worker: WorkerClient,
     private gameView: GameView,
